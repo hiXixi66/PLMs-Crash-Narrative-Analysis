@@ -1,0 +1,26 @@
+# ---- Core Python packages ----
+pandas>=1.5.0
+numpy>=1.23.0
+openpyxl>=3.1.0         # Read and write Excel files
+xlrd>=2.0.1             # For older .xls files if needed
+tqdm>=4.65.0            # Progress bars for data processing
+
+# ---- Machine Learning / NLP ----
+torch>=2.0.0
+transformers>=4.37.0
+datasets>=2.18.0
+peft>=0.11.1            # Parameter-efficient fine-tuning (LoRA)
+accelerate>=0.27.0      # Recommended for Transformers & PEFT
+sentencepiece>=0.1.99   # Some tokenizers require this
+scikit-learn>=1.3.0     # accuracy_score, f1_score, etc.
+
+# ---- Visualization ----
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# ---- Statistics (optional, for Fleiss' kappa) ----
+statsmodels>=0.14.0
+
+# ---- Others ----
+scipy>=1.11.0           # Some numerical computations
+
