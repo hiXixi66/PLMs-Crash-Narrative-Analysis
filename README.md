@@ -2,7 +2,7 @@
 # PLMS-CRASH-NARRATIVE-ANALYSIS
 
 This project contains data processing, model fine-tuning, and evaluation scripts for **traffic crash narrative analysis**.  
-It supports **large language models (LLMs)** (e.g., Qwen, LLaMA) and classic NLP models (BERT, RNN, FastText) for tasks such as:
+It supports **large language models (PLMs)** (e.g., Qwen, LLaMA, BERT) and classic NLP models (TextRNN, FastText) for tasks such as:
 - **MANCOLL classification** (manner of collision)
 - **Crash Category (CCat)**
 - **Crash Configuration (CConf)**
@@ -19,9 +19,9 @@ The project is expected to run on **GPU-enabled servers**.
 PLMS-CRASH-NARRATIVE-ANALYSIS/
 ├── analysis/
 │   ├── consis-compute.py          # Compute cross-model consistency (pairwise agreement, Fleiss' kappa)
-│   ├── mancoll-unknown-class.py   # Analyze and handle unknown MANCOLL classes
+│   ├── mancoll-unknown-class.py   # Analyze the outputs of PLMs on unknown MANCOLL classes
 │   ├── self-cons.py               # Self-consistency analysis for multiple runs
-│   └── US-DB.txt                  # U.S. database reference (optional)
+│   └── US-DB.txt                  # U.S. database reference
 │
 ├── data/
 │   ├── processed_data/            # Cleaned & processed Excel data
@@ -29,7 +29,7 @@ PLMS-CRASH-NARRATIVE-ANALYSIS/
 │
 ├── src/
 │   ├── data_process/
-│   │   ├── extract_excel_info.py  # Extract and clean data from Excel
+│   │   ├── extract_excel_info.py  # Extract and clean data from the massive datset
 │   │   └── NoiseTest_data_gen.py  # Generate noisy datasets for robustness testing
 │   │
 │   └── llm/
@@ -37,14 +37,14 @@ PLMS-CRASH-NARRATIVE-ANALYSIS/
 │       ├── finetune_bert_crashtype.py     # Fine-tune BERT for Crash Type
 │       ├── finetune_bert_mancoll.py       # Fine-tune BERT for MANCOLL classification
 │       ├── finetune_bert_mancoll_noise.py # Fine-tune BERT with noisy MANCOLL labels
-│       ├── llm_loader_HPC.py              # **Central config**: specify model storage paths (Qwen, LLaMA)
+│       ├── llm_loader_HPC.py              # **Central config**: specify model storage paths (Qwen, LLaMA, Mistral, BERT)
 │       ├── mancoll-fastText-finetune.py   # FastText baseline
 │       ├── mancoll-rnn-finetune.py        # RNN baseline
 │       ├── model_finetune_CCat.py         # Fine-tune LLM for Crash Category
 │       ├── model_finetune_Cconf.py        # Fine-tune LLM for Crash Configuration
 │       ├── model_finetune_CTp.py          # Fine-tune LLM for Crash Type
 │       ├── model_finetune-withNoise.py    # Fine-tune LLM with noisy labels
-│       └── model_finetune.py              # General-purpose LLM fine-tuning entrypoint
+│       └── model_finetune.py              # Fine-tune LLM for manner of collision
 │
 └── tests/
 ├── CrashCAT_test.py
