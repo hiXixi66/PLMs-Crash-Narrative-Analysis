@@ -68,7 +68,7 @@ PLMS-CRASH-NARRATIVE-ANALYSIS/
 └── MANCOLL_test.py
 
 ````
-
+Before running inference, you should fine-tune the model and save it. Then load the saved model for inference:
 ---
 
 ## ⚙️ Model Storage Configuration
