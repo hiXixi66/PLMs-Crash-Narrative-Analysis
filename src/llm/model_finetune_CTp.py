@@ -1,25 +1,26 @@
 import pandas as pd
 import torch
 from datasets import Dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer, DataCollatorForSeq2Seq
+from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer
 from peft import get_peft_model, LoraConfig, TaskType
 import json
 import re
-import torch
-from torch.nn import CrossEntropyLoss
-
-import torch.nn.functional as F
-
-from transformers import Trainer
 from torch.nn.utils.rnn import pad_sequence
 
 
+# ============================================================
+# Prompt building
+# ============================================================
 
 def build_crashtype_prompt(vehicle_index, vehicle_summary, crashtype_class_dict):
+    """
+    Build the prompt for crash type classification.
+    """
     crash_type_options = json.dumps(crashtype_class_dict)
     prompt = f"""You are a crash analysis assistant.
 
-        Your task is to assign a crash type ID to a specific vehicle involved in a traffic crash, based on the structured context and detailed textual description below.
+        Your task is to assign a crash type ID to a specific vehicle involved in a traffic crash,
+        based on the structured context and detailed textual description below.
 
         Use the following crash type definitions for classification:
         {crash_type_options}
@@ -32,53 +33,52 @@ def build_crashtype_prompt(vehicle_index, vehicle_summary, crashtype_class_dict)
 
         Instructions:
         - Carefully identify and focus on vehicle {vehicle_index} in the text.
-        - Consider not only this vehicle's motion and behavior but also how it interacted with other vehicles (e.g., which vehicle was backing, struck another, etc.).
+        - Consider not only this vehicle's motion and behavior but also how it interacted with other vehicles
+          (e.g., which vehicle was backing, struck another, etc.).
         - Use both the structured crash context and relevant textual evidence to determine the most appropriate crash type ID.
 
-        Respond with only one number or letter corresponding to the correct crash type from the options above. Do not include any explanation or extra text.
+        Respond with only one number or letter corresponding to the correct crash type from the options above.
+        Do not include any explanation or extra text.
         """
-
     return prompt
+
+
 def replace_vehicle_reference(label_id: int, text: str) -> str:
     """
-    Replace references like 'V5', 'V#5', 'Vehicle 5', or 'Vehicle #5'
+    Replace mentions like 'V5', 'V#5', 'Vehicle 5', or 'Vehicle #5'
     with 'the vehicle to be classified'.
     """
     pattern = fr'\b(V#{label_id}|V{label_id}|Vehicle #{label_id}|Vehicle {label_id})\b'
     return re.sub(pattern, 'the vehicle to be classified', text, flags=re.IGNORECASE)
 
+
 def get_gt_CrashInfoperVeh(caseid, vehno, df_gv):
     """
-    Retrieve CRASHCAT and CRASHCONF for a given CASEID and VEHNO from df_gv.
-
-    Parameters:
-        caseid (int or str): The CASEID of the crash case.
-        vehno (int or str): The vehicle number.
-        df_gv (pd.DataFrame): DataFrame loaded from the 'GV' sheet.
+    Retrieve CRASHCAT / CRASHCONF / CRASTYPE for a given CASEID and VEHNO.
 
     Returns:
-        tuple: (CRASHCAT, CRASHCONF) if found, else (None, None)
+        (crashcat, crashconf, crashtype) or (None, None, None) if not found
     """
     row = df_gv[(df_gv['CASEID'] == caseid) & (df_gv['VEHNO'] == vehno)]
-    
     if not row.empty:
         crashcat = row.iloc[0]['CRASHCAT']
         crashconf = row.iloc[0]['CRASHCONF']
         crashtype = row.iloc[0]['CRASHTYPE']
         return crashcat, crashconf, crashtype
-    else:
-        return None, None, None
+    return None, None, None
 
-# === 路径设置 ===
+
+# ============================================================
+# Paths & model setup
+# ============================================================
+
 model_id = "/mimer/NOBACKUP/groups/naiss2025-22-321/llama3-8b"
 file_path = "data/processed_data/case_info_2021.xlsx"
 category_config_df = pd.read_excel("tests/crashtype.xlsx", sheet_name="Sheet1")
 config_crashtype_df = pd.read_excel("tests/crashtype.xlsx", sheet_name="Sheet3")
-# === 加载模型和Tokenizer ===
-tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, use_fast=False)
-tokenizer.pad_token = tokenizer.eos_token
 
-# 2️⃣ 同步模型的 pad_token_id
+tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, use_fast=False)
+tokenizer.pad_token = tokenizer.eos_token  # ensure we have a pad token
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
@@ -87,50 +87,56 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto"
 )
 model.config.pad_token_id = tokenizer.pad_token_id
-# === 加载数据并转换为Dataset ===
-df = pd.read_excel(file_path, sheet_name=0)[["SUMMARY", "VEHICLES","CASEID"]].dropna()
+
+# ============================================================
+# Data preparation
+# ============================================================
+
+df = pd.read_excel(file_path, sheet_name=0)[["SUMMARY", "VEHICLES", "CASEID"]].dropna()
 dataset = Dataset.from_pandas(df)
 df_gv = pd.read_excel(file_path, sheet_name='GV')
-# === 格式化数据 ===
+
+
 def format_example(row, df_gv, config_crashtype_df, tokenizer, max_length=512):
+    """
+    Convert one crash case row into training examples for each vehicle.
+    """
     raw_summary = row['SUMMARY']
     case_id = row['CASEID']
     number_of_vehicles = int(row['VEHICLES'])
-
     examples = []
-    
+
     for i in range(1, number_of_vehicles + 1):
         summary = replace_vehicle_reference(i, raw_summary)
         GT_crashcat, GT_crashconf, GT_crashtype = get_gt_CrashInfoperVeh(caseid=case_id, vehno=i, df_gv=df_gv)
-        # print(f"Processing vehicle {i} in case {case_id}: GT_crashcat={GT_crashcat}, GT_crashconf={GT_crashconf}, GT_crashtype={GT_crashtype}")
+
         if pd.isna(GT_crashtype):
             print(f"[Warning] Missing ground truth crashtype for vehicle {i} in case {case_id}")
             continue
-        
+
         crashconf = GT_crashconf
         if crashconf not in config_crashtype_df.columns:
             print(f"[Warning] crashconf '{crashconf}' not found in config_crashtype_df columns.")
             continue
-        
-        # 获取分类信息
+
+        # Get class mapping for this crash configuration
         crashtype_class = config_crashtype_df[crashconf].iloc[4]
         crashtype_offset = int(config_crashtype_df[crashconf].iloc[1])
 
-        # 构造 prompt
         prompt = build_crashtype_prompt(
             vehicle_index=i,
             vehicle_summary=summary,
             crashtype_class_dict=crashtype_class
         )
 
+        # Convert ground truth crashtype to label string (0-9 or A-Z)
         label_id = int(GT_crashtype) - crashtype_offset
         if label_id < 10:
             label_str = str(label_id)
         else:
             label_str = chr(ord('A') + (label_id - 10))
 
-
-        # 编码 prompt 和 label
+        # Tokenize prompt & answer
         prompt_tokenized = tokenizer(prompt, truncation=True, padding="max_length", max_length=max_length)
         answer_ids = tokenizer(label_str, add_special_tokens=False)["input_ids"]
 
@@ -139,36 +145,33 @@ def format_example(row, df_gv, config_crashtype_df, tokenizer, max_length=512):
 
         labels = [-100] * len(input_ids)
         answer_start = len(input_ids) - len(answer_ids)
-
         if answer_start < 0:
             print(f"[Error] Answer too long for vehicle {i} in case {case_id}")
             continue
-
         labels[answer_start:] = answer_ids
 
-        example = {
+        examples.append({
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": labels
-        }
-
-        examples.append(example)
+        })
 
     return examples
 
+
 def format_batch(batch):
+    """
+    Map a batch of raw rows into a list of tokenized examples.
+    """
     results = []
     for i in range(len(batch["SUMMARY"])):
         row = {k: batch[k][i] for k in batch}
         examples = format_example(row, df_gv, config_crashtype_df, tokenizer)
         results.extend(examples)
-    
-    # 转换为 dict of lists（HuggingFace datasets 要求）
+
     if not results:
         return {}
-    
-    output = {k: [example[k] for example in results] for k in results[0]}
-    return output
+    return {k: [ex[k] for ex in results] for k in results[0]}
 
 
 tokenized_dataset = dataset.map(
@@ -177,19 +180,24 @@ tokenized_dataset = dataset.map(
     remove_columns=dataset.column_names
 )
 
+# ============================================================
+# LoRA configuration
+# ============================================================
 
-# === LoRA 配置 ===
 peft_config = LoraConfig(
     r=8,
     lora_alpha=32,
-    target_modules=["q_proj"], 
+    target_modules=["q_proj"],
     lora_dropout=0.1,
     bias="none",
     task_type=TaskType.CAUSAL_LM
 )
 model = get_peft_model(model, peft_config)
 
-# === Trainer 配置 ===
+# ============================================================
+# Training setup
+# ============================================================
+
 training_args = TrainingArguments(
     output_dir="models/qwen-finetune-crashtypeq",
     per_device_train_batch_size=2,
@@ -203,22 +211,7 @@ training_args = TrainingArguments(
     dataloader_pin_memory=False,
 )
 
-# === 创建 Trainer 并训练 ===
-# data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, pad_to_multiple_of=8)
-
-# trainer = Trainer(
-#     model=model,
-#     args=training_args,
-#     train_dataset=tokenized_dataset,
-#     tokenizer=tokenizer,
-#     data_collator=lambda data: {
-#         "input_ids": torch.tensor([f["input_ids"] for f in data]).to(model.device),
-#         "attention_mask": torch.tensor([f["attention_mask"] for f in data]).to(model.device),
-#         "labels": torch.tensor([f["labels"] for f in data]).to(model.device),
-#     }
-    
-# )
-
+# Custom data collator to pad dynamically
 data_collator = lambda data: {
     "input_ids": pad_sequence([torch.tensor(f["input_ids"]) for f in data],
                                batch_first=True,
@@ -228,7 +221,7 @@ data_collator = lambda data: {
                                     padding_value=0),
     "labels": pad_sequence([torch.tensor(f["labels"]) for f in data],
                             batch_first=True,
-                            padding_value=-100)  # -100 用于忽略 loss 计算
+                            padding_value=-100)
 }
 
 trainer = Trainer(
@@ -238,7 +231,5 @@ trainer = Trainer(
     tokenizer=tokenizer,
     data_collator=data_collator
 )
-
-
 
 trainer.train()

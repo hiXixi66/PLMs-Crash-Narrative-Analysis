@@ -34,7 +34,7 @@ import re
 
 def build_examples_from_crash_and_gv(df_crash, df_gv, text_col="SUMMARY"):
     """
-    将CRASH和GV结合，构造逐车辆的训练样本
+    Combine CRASH and GV sheets to construct per-vehicle training samples.
     """
     records = []
     for _, row in df_gv.iterrows():
@@ -42,13 +42,13 @@ def build_examples_from_crash_and_gv(df_crash, df_gv, text_col="SUMMARY"):
         vehno  = row["VEHNO"]
         crashtype = row["CRASHTYPE"]
 
-        # 找到对应的CRASH summary
+        # Find the corresponding CRASH summary
         crash_row = df_crash[df_crash["CASEID"] == caseid]
         if crash_row.empty:
             continue
         summary = crash_row.iloc[0][text_col]
 
-        # 替换该车辆的标记为 'the vehicle to be classified'
+        # Replace the vehicle reference with 'the vehicle to be classified'
         text = replace_vehicle_reference(vehno, str(summary))
 
         records.append({
@@ -80,26 +80,27 @@ def get_gt_CrashInfoperVeh(caseid, vehno, df_gv):
         return crashcat, crashconf, crashtype
     else:
         return None, None, None
-# ======== 配置 ========
+
+# ======== Configuration ========
 SEED = 42
 # model_id = "/mimer/NOBACKUP/groups/naiss2025-22-321/llama3-8b"
 # file_path = "data/processed_data/case_info_2021.xlsx"
 # config_crashtype_df = pd.read_excel("tests/crashtype.xlsx", sheet_name="Sheet3")
-# === 加载模型和Tokenizer ===
+# === Load model and tokenizer ===
 # tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, use_fast=False)
 # tokenizer.pad_token = tokenizer.eos_token
 MODEL_NAME = "bert-base-uncased" 
 MAX_LENGTH = 256
 OUTPUT_DIR = "./crashtype_bert3"
 EXCEL_PATH = "data/processed_data/case_info_2021.xlsx"  
-test_PATH= "data/processed_data/case_info_2020.xlsx"  
-test_path= "data/processed_data/case_info_2020.xlsx"    
+test_PATH = "data/processed_data/case_info_2020.xlsx"  
+test_path = "data/processed_data/case_info_2020.xlsx"    
 TEXT_COL = "SUMMARY"
 LABEL_COL = "CRASHTYPE"
 VAL_SIZE = 0.1              
 TEST_SIZE = 0.1                 
 
-# ======== 随机种子 ========
+# ======== Random seed ========
 def set_seed(seed=SEED):
     random.seed(seed)
     np.random.seed(seed)
@@ -108,28 +109,25 @@ def set_seed(seed=SEED):
 
 set_seed()
 
-# ======== 读取数据 ========
-# 原始表
+# ======== Load data ========
+# Original sheets
 df_crash = pd.read_excel(EXCEL_PATH, sheet_name="CRASH")
 df_gv    = pd.read_excel(EXCEL_PATH, sheet_name="GV")
 df = build_examples_from_crash_and_gv(df_crash, df_gv, text_col="SUMMARY")
 
-
 df_crash_test = pd.read_excel(test_PATH, sheet_name="CRASH")
 df_gv_test    = pd.read_excel(test_PATH, sheet_name="GV")
 df_test = build_examples_from_crash_and_gv(df_crash_test, df_gv_test, text_col="SUMMARY")
-# 清理空值
-df = df[["SUMMARY", "CRASHTYPE","CASEID","VEHNO"]].dropna().reset_index(drop=True)
 
+# Clean missing values
+df = df[["SUMMARY", "CRASHTYPE","CASEID","VEHNO"]].dropna().reset_index(drop=True)
 df_test_extra = df_test[["SUMMARY", "CRASHTYPE","CASEID","VEHNO"]].dropna().reset_index(drop=True)
-# ======== 标签编码 ========
-# 原始类别集合
-# unique_labels = sorted(int(x) for x in df[LABEL_COL].unique())
-label2id = {i: i for i in range(100)}   # 0–99
+
+# ======== Label encoding ========
+label2id = {i: i for i in range(100)}   # IDs 0–99
 id2label = {i: i for i in range(100)}
 num_labels = 100
 print("Label to ID mapping:", label2id)
-
 
 df[LABEL_COL] = df[LABEL_COL].map(label2id)
 df_test_extra[LABEL_COL] = df_test_extra[LABEL_COL].map(label2id)
@@ -144,7 +142,7 @@ df_test_extra[LABEL_COL] = df_test_extra[LABEL_COL].astype(int)
 if TEST_SIZE > 0:
     df_trainval, df_test = train_test_split(
         df, test_size=TEST_SIZE, random_state=SEED
-        # 去掉 stratify 参数
+        # Removed stratify parameter
     )
 else:
     df_trainval, df_test = df, None
@@ -153,12 +151,12 @@ df_train, df_val = train_test_split(
     df_trainval, test_size=VAL_SIZE, random_state=SEED
 )
 
-# ======== Tokenizer 与 Dataset ========
+# ======== Tokenizer & Dataset ========
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
 
 class TextClsDataset(Dataset):
     def __init__(self, df: pd.DataFrame, text_col: str, label_col: str, tokenizer, max_length: int):
-        self.df = df.reset_index(drop=True)  # ✅ 保存原始 df，方便后续按 CASEID / VEHNO 对齐
+        self.df = df.reset_index(drop=True)  # ✅ Keep original df for CASEID/VEHNO alignment later
         self.texts = df[text_col].tolist()
         self.labels = df[label_col].tolist()
         self.tokenizer = tokenizer
@@ -187,18 +185,17 @@ class TextClsDataset(Dataset):
             
         return item
 
-
 train_ds = TextClsDataset(df_train, TEXT_COL, LABEL_COL, tokenizer, MAX_LENGTH)
 val_ds   = TextClsDataset(df_val,   TEXT_COL, LABEL_COL, tokenizer, MAX_LENGTH)
-# test_ds  = TextClsDataset(df_test,  TEXT_COL, LABEL_COL, tokenizer, MAX_LENGTH) if df_test is not None else None
-test_ds  = TextClsDataset(df_test_extra,  TEXT_COL, LABEL_COL, tokenizer, MAX_LENGTH) if df_test is not None else None
-# ======== 处理类别不平衡（类权重） ========
+test_ds  = TextClsDataset(df_test_extra, TEXT_COL, LABEL_COL, tokenizer, MAX_LENGTH) if df_test is not None else None
+
+# ======== Handle class imbalance (class weights) ========
 class_counts = df_train[LABEL_COL].value_counts().sort_index().values
-class_weights = (1.0 / (class_counts + 1e-9))  # 逆频率
+class_weights = (1.0 / (class_counts + 1e-9))  # Inverse frequency
 class_weights = class_weights / class_weights.sum() * num_labels
 class_weights_tensor = torch.tensor(class_weights, dtype=torch.float)
 
-# 自定义 Trainer 以注入 class weights
+# Custom Trainer to inject class weights
 class WeightedTrainer(Trainer):
     def __init__(self, *args, class_weights=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -223,10 +220,7 @@ class WeightedTrainer(Trainer):
         )
         return (loss, outputs) if return_outputs else loss
 
-
-
-
-# ======== 模型 ========
+# ======== Model ========
 model = AutoModelForSequenceClassification.from_pretrained(
     MODEL_NAME,
     num_labels=num_labels,
@@ -234,7 +228,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
     label2id=label2id,
 )
 
-# ======== 评估指标 ========
+# ======== Metrics ========
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     preds = np.argmax(logits, axis=1)
@@ -242,7 +236,7 @@ def compute_metrics(eval_pred):
     f1_macro = f1_score(labels, preds, average="macro")
     return {"accuracy": acc, "f1_macro": f1_macro}
 
-# ======== 训练参数 ========
+# ======== Training arguments ========
 training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
     per_device_train_batch_size=16,
@@ -250,7 +244,7 @@ training_args = TrainingArguments(
     learning_rate=2e-5,
     num_train_epochs=10,
     weight_decay=0.01,
-    eval_strategy="epoch",   # 老版本关键字
+    eval_strategy="epoch",   # for older Transformers versions
     save_strategy="epoch",
     load_best_model_at_end=True,
     metric_for_best_model="f1_macro",
@@ -270,21 +264,24 @@ trainer = WeightedTrainer(
     compute_metrics=compute_metrics,
 )
 
-# ======== 训练 ========
+# ======== Training ========
 # trainer.train()
 # trainer.save_model(OUTPUT_DIR)
 # tokenizer.save_pretrained(OUTPUT_DIR)
 # quit()
+
 from transformers import AutoModelForSequenceClassification
 def predict_case(df_crash, caseid, model, tokenizer, max_length=256):
-
+    """
+    Predict crash type for each vehicle in a case.
+    """
     crash_row = df_crash[df_crash["CASEID"] == caseid]
     if crash_row.empty:
         return []
     summary = crash_row.iloc[0]["SUMMARY"]
 
     preds = []
-    vehnos = crash_row.iloc[0]["VEHNO"]  # 如果是一个数=车辆数量
+    vehnos = crash_row.iloc[0]["VEHNO"]  # If this is a number = total number of vehicles
     for vehno in range(1, vehnos+1):
         text = replace_vehicle_reference(vehno, str(summary))
         enc = tokenizer(
@@ -300,13 +297,14 @@ def predict_case(df_crash, caseid, model, tokenizer, max_length=256):
         preds.append({"CASEID": caseid, "VEHNO": vehno, "PRED_CRASHTYPE": id2label[pred]})
     return preds
 
-from transformers import AutoModelForSequenceClassification
-
 def eval_and_print(name, df_crash, df_gv, dataset, checkpoint_dir="crashtype_bert/checkpoint-2044"):
+    """
+    Evaluate on a dataset and print both vehicle-level and case-level metrics.
+    """
     if dataset is None:
         return
 
-    # 从保存的 checkpoint 重新加载模型
+    # Reload model from saved checkpoint
     model = AutoModelForSequenceClassification.from_pretrained(
         checkpoint_dir,
         num_labels=num_labels,
@@ -329,14 +327,14 @@ def eval_and_print(name, df_crash, df_gv, dataset, checkpoint_dir="crashtype_ber
     print(f"Accuracy (all vehicles): {accuracy_score(y_true, y_pred):.4f}")
     print(f"F1-macro (all vehicles): {f1_score(y_true, y_pred, average='macro'):.4f}")
 
-    # === case-level accuracy ===
+    # === Case-level accuracy ===
     records = []
     for caseid in df_gv["CASEID"].unique():
-        # 在 CRASH 表里查该 caseid 的车辆总数
+        # Check the total number of vehicles in this case from the CRASH sheet
         crash_row = df_crash[df_crash["CASEID"] == caseid]
         if crash_row.empty:
             continue
-        total = int(crash_row.iloc[0]["VEHICLES"])   # ✅ 用 CRASH 表中的 VEHICLES 列
+        total = int(crash_row.iloc[0]["VEHICLES"])   # ✅ Use VEHICLES column in CRASH sheet
         summary = crash_row.iloc[0]["SUMMARY"]
 
         correct = 0
@@ -348,7 +346,7 @@ def eval_and_print(name, df_crash, df_gv, dataset, checkpoint_dir="crashtype_ber
             if true_label is None:
                 continue
 
-            # 找到对应预测：dataset 的索引要和 df_gv 对齐
+            # Find the matching prediction: align dataset index with CASEID & VEHNO
             pred_idx = dataset.df.index[(dataset.df["CASEID"] == caseid) & (dataset.df["VEHNO"] == vehno)]
             if len(pred_idx) == 0:
                 continue
@@ -377,12 +375,12 @@ def eval_and_print(name, df_crash, df_gv, dataset, checkpoint_dir="crashtype_ber
 # eval_and_print("Validation", val_ds)
 eval_and_print("Test", df_crash_test, df_gv_test, test_ds, checkpoint_dir="crashtype_bert3/checkpoint-2044")
 
-# ======== 推理函数示例 ========
+# ======== Example inference function ========
 
-# 示例：
+# Example usage:
 # if __name__ == "__main__":
-    # examples = [
-    #     "V1 struck the rear of V2 pushing V2 into V3. V3 then left the scene.",
-    #     "Two vehicles collided head-on on a two-lane road.",
-    # ]
-    # print("\nPredictions:", predict_case(examples))
+#     examples = [
+#         "V1 struck the rear of V2 pushing V2 into V3. V3 then left the scene.",
+#         "Two vehicles collided head-on on a two-lane road.",
+#     ]
+#     print("\nPredictions:", predict_case(examples))

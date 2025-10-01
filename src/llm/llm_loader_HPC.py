@@ -33,36 +33,29 @@ class LLM_HPC:
         os.makedirs(cache_dir, exist_ok=True)
         
         if self.provider == "mistral" :
-            mistral_models_path = "/mimer/NOBACKUP/groups/naiss2025-22-321/Mistral"
+            mistral_models_path = ""
             self.tokenizer = MistralTokenizer.from_file(f"{mistral_models_path}/tokenizer.model.v3")
             self.model = Transformer.from_folder(mistral_models_path)
-
-            # self.tokenizer = MistralTokenizer.from_file(f"{mistral_models_path}/tokenizer.model")
             
         if self.provider == "bert":
             from transformers import BertTokenizer, BertForSequenceClassification
             if model_dir is None:
-                model_dir = "models/bert-ft-MANCOLL-bias-test/with-bias-20perc-new/checkpoint-940"
+                model_dir = ""
             else:
                 model_dir = self.model_dir
-            # model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/mancoll_bert2/checkpoint-845"
+
             self.tokenizer = BertTokenizer.from_pretrained(model_dir, local_files_only=True)
             self.model = BertForSequenceClassification.from_pretrained(model_dir, local_files_only=True)
             
             
         if self.provider == "transformers":
-        #     self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        #     self.model = AutoModelForCausalLM.from_pretrained(model_name)
+
             if self.model_name == "qwen2.5-7b-instruct-1m":
                 print("Loading Qwen2.5-7b-instruct-1m model...")
-                # model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/qwen2.5-7b-instruct-1m"
-                # model_dir="/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/models/qwen2.5-finetune-crashtypeqkv/checkpoint-2163"
-                # model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/models/qwen-finetune-crashtypeq/checkpoint-1442"
-                # model_dir = '/mimer/NOBACKUP/groups/naiss2025-22-321/projects/LLM-crash-data/models/qwen2.5-finetune-crashcat/checkpoint-72
-                # model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/projects/LLM-crash-data/models/qwen2.5-finetune-crashtype/checkpoint-2160"
-                model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/models/qwen2.5-ft-MANCOLL/checkpoint-1251"
-                use_auth_token="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"
-                # assert os.path.exists(model_dir), f"路径不存在：{model_dir}"
+
+                model_dir = ""
+                use_auth_token=""
+
                 self.tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True,local_files_only=True,use_auth_token=True)
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_dir,
@@ -74,7 +67,7 @@ class LLM_HPC:
                 
             elif self.model_name == "llama3-70b":
                 if self.model_dir is not None:
-                    model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/llama3/llama3-70b"
+                    model_dir = ""
                 else:
                     model_dir = self.model_dir
                 self.tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True, local_files_only=True)
@@ -87,16 +80,12 @@ class LLM_HPC:
                     local_files_only=True
                 )
             elif self.model_name == "llama3-3b":
-                # model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/llama3-3b"
-                # model_dir = "models/llama3B-ft-MANCOLL-noise-test/with-noise-40perc/checkpoint-1668"
+
                 if self.model_dir is not None:
                     model_dir = self.model_dir
                 else:
-                    model_dir="models/llama3B-ft-MANCOLL-noise-test/with-bias-20perc/checkpoint-1668"
-                # model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/models/llama3-1b-finetune-crashtypeqkv/checkpoint-2884"
-                # model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/models/llama31b-ft-MANCOLL/checkpoint-1668"
-                # model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/models/llama3-3b-finetune-MANCOLL/checkpoint-1251"
-                self.tokenizer = AutoTokenizer.from_pretrained(model_dir, local_files_only=True)
+                    model_dir=""
+                    self.tokenizer = AutoTokenizer.from_pretrained(model_dir, local_files_only=True)
 
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_dir,
@@ -106,9 +95,8 @@ class LLM_HPC:
                     local_files_only=True
                 )
             elif self.model_name == "llama3-8b":
-                # model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/llama3-8b"
-                # model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/models/llama3-8b-finetune-crashtypeqkv/checkpoint-2163"
-                model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/models/llama38b-ft-MANCOLL/checkpoint-1251"
+
+                model_dir = ""
                 self.tokenizer = AutoTokenizer.from_pretrained(model_dir, local_files_only=True)
 
                 self.model = AutoModelForCausalLM.from_pretrained(
@@ -119,8 +107,8 @@ class LLM_HPC:
                     local_files_only=True
                 )
             elif self.model_name == "deepseek-r1-Distill-Qwen-32B":
-                model_id = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
-                model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/deepseek/deepseek-r1/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-32B/snapshots/711ad2ea6aa40cfca18895e8aca02ab92df1a746"
+
+                model_dir = ""
                 self.tokenizer = AutoTokenizer.from_pretrained( model_dir,trust_remote_code=True,local_files_only=True)
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_dir,
@@ -130,11 +118,8 @@ class LLM_HPC:
                     torch_dtype="auto"
                 )
             elif self.model_name == "mistral" :
-                # mistral_models_path = "/mimer/NOBACKUP/groups/naiss2025-22-321/Mistral"
-                # self.tokenizer = MistralTokenizer.from_file(f"{mistral_models_path}/tokenizer.model.v3")
-                # self.model = Transformer.from_folder(mistral_models_path)
-                model_dir = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/models/mistral-ft-MANCOLL/checkpoint-1251"
-                # self.tokenizer = MistralTokenizer.from_file(f"{mistral_models_path}/tokenizer.model")
+
+                model_dir = ""
                 self.tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True,local_files_only=True,use_auth_token=True)
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_dir,
@@ -162,7 +147,7 @@ class LLM_HPC:
 
     def _query_openai(self, prompt: str) -> str:
         """Call OpenAI API to generate text"""
-        client = openai.OpenAI(api_key='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')
+        client = openai.OpenAI(api_key='')
         
         max_tokens = self.max_new_tokens
         model = self.model_name
@@ -180,7 +165,7 @@ class LLM_HPC:
     def _query_llama31_70b(self, prompt: str) -> str:
         """Call local Ollama to generate text"""
         client = openai.OpenAI(
-            api_key="abc", base_url="http://llama-31-70b-service.ray:8000/v1/", default_headers={"x-foo": "true"}
+            api_key="abc", base_url="", default_headers={"x-foo": "true"}
         )
         max_tokens = self.max_new_tokens
         model="Meta-Llama-3.1-70B-Instruct"
@@ -196,15 +181,12 @@ class LLM_HPC:
     
     def _query_transformers(self, prompt: str) -> str:
         """Call local Hugging Face Transformers to generate text"""
-        # print(f"Loading model: {self.model_name}")
+
         
         input_text = prompt
         inputs = self.tokenizer(input_text, return_tensors="pt").to(self.model.device)
         output_ids = self.model.generate(**inputs, max_new_tokens=self.max_new_tokens,pad_token_id=self.tokenizer.eos_token_id)
-        # output_ids = self.model.generate(**inputs, max_new_tokens=self.max_new_tokens,temperature=0.2)
-        
 
-        # 只保留新生成部分（不包含输入 prompt）
         generated_ids = output_ids[0][inputs["input_ids"].shape[-1]:]
         answer = self.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
         return answer
@@ -256,15 +238,3 @@ class LLM_HPC:
             raise ValueError(f"Unsupported LLM provider: {provider}")
 
 
-
-
-# if __name__ == "__main__":
-#     llm = LLM()
-
-
-#     response = llm.query("What is the capital of France?")
-#     print("OpenAI GPT-4 Response:", response)
-
-
-#     responses = llm.batch_query(["Tell me a joke.", "What is the meaning of life?"])
-#     print("Batch Responses:", responses)

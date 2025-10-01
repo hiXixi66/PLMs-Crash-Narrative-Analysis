@@ -25,7 +25,6 @@ def extract_excel_info(file_path):
 file_path = "data/case_info.xlsx"  
 excel_info = extract_excel_info(file_path)
 
-# 打印提取的信息
 print(f"Table Name: {excel_info['Table Name']}")
 print(f"Number of Sheets: {excel_info['Number of Sheets']}")
 print("Sheet Names and Headers:")

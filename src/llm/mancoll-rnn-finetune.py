@@ -11,9 +11,9 @@ from collections import Counter
 # ===============================
 # 1. 读取数据
 # ===============================
-file_path = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/data/processed_data/case_info_2021.xlsx"
+file_path = "data/processed_data/case_info_2021.xlsx"
 df = pd.read_excel(file_path, sheet_name="CRASH")
-test_path = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/data/processed_data/case_info_2020.xlsx"
+test_path = "data/processed_data/case_info_2020.xlsx"
 
 
 texts = df["SUMMARY"].astype(str).tolist()
@@ -72,7 +72,7 @@ train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn
 val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, collate_fn=collate_fn)
 
 # ===============================
-# 4. 定义 TextRNN 模型
+# 4. TextRNN 
 # ===============================
 class TextRNN(nn.Module):
     def __init__(self, vocab_size, embed_dim, hidden_dim, num_classes, rnn_type="LSTM"):
@@ -87,7 +87,6 @@ class TextRNN(nn.Module):
     def forward(self, x):
         x = self.embedding(x)
         outputs, _ = self.rnn(x)
-        # 取最后一步的 hidden state
         out = outputs[:, -1, :]
         return self.fc(out)
 
@@ -95,7 +94,7 @@ num_classes = len(set(labels))
 model = TextRNN(vocab_size=len(vocab), embed_dim=128, hidden_dim=128, num_classes=num_classes, rnn_type="LSTM")
 
 # ===============================
-# 5. 训练
+# 5. train
 # ===============================
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
@@ -115,7 +114,7 @@ for epoch in range(5):
     print(f"Epoch {epoch+1} finished.")
 
 # ===============================
-# 6. 评估
+# 6. Validation evaluation
 # ===============================
 model.eval()
 all_preds, all_labels = [], []
@@ -134,24 +133,23 @@ print(f"Accuracy: {acc:.4f}")
 print(f"Macro F1: {macro_f1:.4f}")
 
 # ===============================
-# 7. 在测试集上评估
+# 7.   Test set evaluation
 # ===============================
-# 读取测试集
+
 df_test = pd.read_excel(test_path, sheet_name="CRASH")
 test_texts = df_test["SUMMARY"].astype(str).tolist()
 test_labels = df_test["MANCOLL"].astype(int).tolist()
 
-# 用训练集的 label2id 映射标签
+
 test_labels = [label2id.get(l, -1) for l in test_labels]
-# 过滤掉不在训练类别里的样本
+
 test_pairs = [(t, l) for t, l in zip(test_texts, test_labels) if l != -1]
 test_texts, test_labels = zip(*test_pairs)
 
-# 构建测试集 Dataset
 test_dataset = CrashDataset(test_texts, test_labels)
 test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, collate_fn=collate_fn)
 
-# 在测试集上推理
+
 model.eval()
 test_preds, test_true = [], []
 with torch.no_grad():

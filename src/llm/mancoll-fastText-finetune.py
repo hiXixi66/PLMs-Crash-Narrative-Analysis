@@ -12,6 +12,7 @@ import random
 import numpy as np
 
 def reset_seed(seed=42):
+    """Reset all random seeds for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -20,21 +21,18 @@ def reset_seed(seed=42):
     torch.backends.cudnn.benchmark = False
     
 # ===============================
-# 1. 读取数据
+# 1. Load data
 # ===============================
-for i in {5,10,15,20, 30,40}:  # 5%, 10%, 15%, 30%, 40%
+for i in {5, 10, 15, 20, 30, 40}:  # 5%, 10%, 15%, 20%, 30%, 40%
 # for i in range(200,601,200):
     reset_seed(42)
     file_path = f"data/processed_data/case_info_2021_{i}perc_noise.xlsx"
     print(f"Training with {i} samples")
-    # file_path = f"data/processed_data/case_info_2021.xlsx"
     print(f"Loading data from {file_path}")
 
     df = pd.read_excel(file_path)
-    test_path = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/data/processed_data/case_info_2020.xlsx"
+    test_path = "data/processed_data/case_info_2020.xlsx"
 
-    # texts = df["SUMMARY"].astype(str).tolist()[:i]
-    # labels = df["MANCOLLNEW"].astype(int).tolist()[:i]
     texts = df["SUMMARY"].astype(str).tolist()
     labels = df["MANCOLLNEW"].astype(int).tolist()
 
@@ -43,13 +41,14 @@ for i in {5,10,15,20, 30,40}:  # 5%, 10%, 15%, 30%, 40%
     labels = [label2id[l] for l in labels]
     num_classes = len(unique_labels)
     print(f"Number of classes: {num_classes}, label2id: {label2id}")
-    # train/val split
+
+    # Split into training and validation sets
     train_texts, val_texts, train_labels, val_labels = train_test_split(
         texts, labels, test_size=0.1, random_state=42
     )
 
     # ===============================
-    # 2. 构建词表
+    # 2. Build vocabulary
     # ===============================
     def tokenize(text):
         return text.lower().split()
@@ -91,7 +90,7 @@ for i in {5,10,15,20, 30,40}:  # 5%, 10%, 15%, 30%, 40%
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, collate_fn=collate_fn)
 
     # ===============================
-    # 4. 定义 FastText 模型
+    # 4. Define FastText model
     # ===============================
     class FastText(nn.Module):
         def __init__(self, vocab_size, embed_dim, num_classes):
@@ -101,7 +100,7 @@ for i in {5,10,15,20, 30,40}:  # 5%, 10%, 15%, 30%, 40%
 
         def forward(self, x):
             emb = self.embedding(x)       # [batch, seq_len, embed_dim]
-            out = emb.mean(dim=1)         # 平均池化
+            out = emb.mean(dim=1)         # Average pooling
             return self.fc(out)           # [batch, num_classes]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -111,7 +110,7 @@ for i in {5,10,15,20, 30,40}:  # 5%, 10%, 15%, 30%, 40%
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     # ===============================
-    # 5. 训练
+    # 5. Training
     # ===============================
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -131,7 +130,7 @@ for i in {5,10,15,20, 30,40}:  # 5%, 10%, 15%, 30%, 40%
         print(f"Epoch {epoch+1} finished.")
 
     # ===============================
-    # 6. 验证集评估
+    # 6. Validation evaluation
     # ===============================
     model.eval()
     all_preds, all_labels = [], []
@@ -150,12 +149,13 @@ for i in {5,10,15,20, 30,40}:  # 5%, 10%, 15%, 30%, 40%
     print(f"[Val] Macro F1: {macro_f1:.4f}")
 
     # ===============================
-    # 7. 在测试集上评估
+    # 7. Test set evaluation
     # ===============================
     df_test = pd.read_excel(test_path)
     test_texts = df_test["SUMMARY"].astype(str).tolist()
     test_labels = df_test["MANCOLL"].astype(int).tolist()
 
+    # Map test labels to training label IDs; skip any unseen labels
     test_labels = [label2id.get(l, -1) for l in test_labels]
     test_pairs = [(t, l) for t, l in zip(test_texts, test_labels) if l != -1]
     test_texts, test_labels = zip(*test_pairs)
@@ -179,7 +179,8 @@ for i in {5,10,15,20, 30,40}:  # 5%, 10%, 15%, 30%, 40%
     print(f"[Test] Accuracy: {test_acc:.4f}")
     print(f"[Test] Macro F1: {test_macro_f1:.4f}")
 
-    last_class = 6  # 假设最后一个类别就是最大值
+    # Evaluate again excluding the last class (often "Unknown")
+    last_class = 6  # Assume the last class ID is 6
     mask = [y != last_class for y in test_labels]
 
     filtered_true = [y for y, m in zip(test_true, mask) if m]

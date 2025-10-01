@@ -5,20 +5,18 @@ import pandas as pd
 import numpy as np
 
 # =========================
-# 配置
+# Configuration
 # =========================
-ROOT_DIR = "/mimer/NOBACKUP/groups/naiss2025-22-321/Cluster-LLM-Crash-Data/projects/LLM-crash-data/reports/mancolll-test/cons"
+ROOT_DIR = "reports/mancolll-test/cons"
 
-# 将文件名转为模型标签（如：MANCOLL-classification_llama3b-417.xlsx -> MANCOLL-classification_llama3b-417）
-import os
-
+# Convert file name to a model tag (e.g., "MANCOLL-classification_llama3b-417.xlsx" → "MANCOLL-classification_llama3b-417")
 def file_to_model_tag(path: str) -> str:
     base = os.path.basename(path)
     name = os.path.splitext(base)[0]
-    return name[2:]  # 去掉前两个字符
+    return name[2:]  # Remove the first two characters
 
 # =========================
-# 读取所有 xlsx
+# Read all .xlsx files
 # =========================
 xlsx_files = sorted(glob.glob(os.path.join(ROOT_DIR, "*.xlsx")))
 if not xlsx_files:
@@ -28,14 +26,16 @@ frames = []
 
 for fp in xlsx_files:
     tag = file_to_model_tag(fp)
-    # 指定 openpyxl 引擎更稳妥
+    # Use openpyxl engine for better compatibility
     df = pd.read_excel(fp, engine="openpyxl")
-    # 列名容错
+
+    # Column name tolerance (case-insensitive)
     cols_lower = {c.lower(): c for c in df.columns}
+
     def safe_to_str(x):
         if isinstance(x, str):
             return x.strip()
-        elif isinstance(x, float) and x.is_integer():  # 只处理整数型浮点
+        elif isinstance(x, float) and x.is_integer():  # Handle float integers
             return str(int(x))
         elif isinstance(x, (int, np.integer)):
             return str(x)
@@ -56,33 +56,33 @@ for fp in xlsx_files:
 
     tmp = df[[col_summary, col_mancoll, col_pred]].copy()
     tmp.columns = ["SUMMARY", "MANCOLL", tag]
-    # 统一字符串化与去空白
+    # Convert to string and strip spaces
     tmp["SUMMARY"] = tmp["SUMMARY"].astype(str).str.strip()
     tmp["MANCOLL"] = tmp["MANCOLL"].apply(safe_to_str)
     tmp[tag]       = tmp[tag].apply(safe_to_str)
     frames.append(tmp)
-    print(frames)
+
 # =========================
-# 合并宽表
+# Merge all files into a wide table
 # =========================
 merged = frames[0]
 for t in frames[1:]:
     merged = merged.merge(t, on=["SUMMARY", "MANCOLL"], how="outer")
 
-# 样本ID（基于 SUMMARY + MANCOLL 的 hash，便于追踪）
+# Create a sample ID (based on hash of SUMMARY + MANCOLL)
 def hash_id(row) -> str:
     s = (row["SUMMARY"] or "") + "||" + (row["MANCOLL"] or "")
     return hashlib.md5(s.encode("utf-8")).hexdigest()[:10]
 
 merged.insert(0, "sample_id", merged.apply(hash_id, axis=1))
 
-# 模型列与 GT
+# Identify model columns and GT column
 model_cols = [c for c in merged.columns if c not in ["sample_id", "SUMMARY", "MANCOLL"]]
 merged["GT"] = merged["MANCOLL"].astype(str).str.strip()
 models_plus = model_cols + ["GT"]
 
 # =========================
-# 两两一致率（Exact Match）
+# Pairwise exact match (consistency)
 # =========================
 def pairwise_consistency(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     out = pd.DataFrame(index=cols, columns=cols, dtype=float)
@@ -95,14 +95,14 @@ def pairwise_consistency(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
                 out.loc[a, b] = np.nan if len(both) == 0 else (both[a] == both[b]).mean()
     return out
 
-pairwise = pairwise_consistency(merged, model_cols)          # 模型↔模型
-pairwise_with_gt = pairwise_consistency(merged, models_plus) # 模型+GT
+pairwise = pairwise_consistency(merged, model_cols)          # Model ↔ Model
+pairwise_with_gt = pairwise_consistency(merged, models_plus) # Model + GT
 
-# 各模型对 GT 的一致率（= accuracy）
+# Accuracy of each model against GT
 acc_vs_gt = pairwise_with_gt.loc[model_cols, "GT"].rename("accuracy_vs_GT").to_frame()
 
 # =========================
-# 样本级一致度（多数派比例）
+# Sample-level consistency (majority agreement)
 # =========================
 def majority_agreement(row: pd.Series, cols: list[str]) -> float:
     preds = [row[c] for c in cols if pd.notna(row[c])]
@@ -111,26 +111,25 @@ def majority_agreement(row: pd.Series, cols: list[str]) -> float:
     vc = pd.Series(preds).value_counts()
     return vc.iloc[0] / len(preds)
 
-# 不含 GT
+# Models only
 merged["sample_consistency"] = merged.apply(lambda r: majority_agreement(r, model_cols), axis=1)
 overall_consistency = merged["sample_consistency"].mean()
 
-# 含 GT
+# Models + GT
 merged["sample_consistency_with_GT"] = merged.apply(lambda r: majority_agreement(r, models_plus), axis=1)
 overall_consistency_with_GT = merged["sample_consistency_with_GT"].mean()
 
-# Excluding 9（基于 GT）
+# Excluding class 9 (based on GT)
 mask_excl9 = merged["GT"] != "9"
 overall_excl9             = merged.loc[mask_excl9, "sample_consistency"].mean()
 overall_excl9_with_GT     = merged.loc[mask_excl9, "sample_consistency_with_GT"].mean()
 
 # =========================
-# （可选）Fleiss' kappa（多“标注者”一致性）
+# (Optional) Fleiss' kappa for multi-rater agreement
 # =========================
 fleiss_kappa = None
 try:
     from statsmodels.stats.inter_rater import fleiss_kappa as _fleiss_kappa
-    # 收集标签全集
     labels = pd.unique(pd.concat([merged[c] for c in model_cols], ignore_index=True).dropna())
     label_to_idx = {lab: i for i, lab in enumerate(sorted(labels, key=str))}
     rows = []
@@ -147,10 +146,10 @@ try:
         table = np.vstack(rows)
         fleiss_kappa = _fleiss_kappa(table)
 except Exception:
-    pass  # 没装 statsmodels 或其他异常则跳过
+    pass  # Skip if statsmodels is not installed or any error occurs
 
 # =========================
-# 导出结果
+# Export results
 # =========================
 pairwise_out         = os.path.join(ROOT_DIR, "consistency_matrix.csv")
 pairwise_with_gt_out = os.path.join(ROOT_DIR, "consistency_matrix_with_GT.csv")
@@ -177,19 +176,19 @@ else:
     print("Fleiss' kappa not computed (install statsmodels to enable).")
 
 # =========================
-# 作图（放大字体）
+# Plotting (larger fonts for readability)
 # =========================
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# 放大整体字体
+# Increase font sizes globally
 sns.set_context("talk", font_scale=1.5)
 plt.rcParams["axes.titlesize"] = 20
 plt.rcParams["axes.labelsize"] = 20
 plt.rcParams["xtick.labelsize"] = 18
 plt.rcParams["ytick.labelsize"] = 18
 
-# 图1：模型↔模型一致性热力图
+# Figure 1: Cross-model consistency heatmap (models only)
 plt.figure(figsize=(11, 9))
 sns.heatmap(pairwise.astype(float), annot=True, fmt=".2f", cmap="YlGnBu",
             cbar_kws={'label': 'Exact Match Rate'}, annot_kws={"size": 18})
@@ -198,19 +197,17 @@ plt.tight_layout()
 plt.savefig(os.path.join(ROOT_DIR, "cross_consistency_heatmap_models_only.png"), dpi=300)
 plt.close()
 
-# 图1b：模型+GT 一致性热力图（模型↔GT 列/行即各模型准确率）
+# Figure 1b: Cross-model + GT consistency heatmap
 plt.figure(figsize=(10, 8))
 sns.heatmap(pairwise_with_gt.astype(float), annot=True, fmt=".2f", cmap="YlGnBu",
             cbar_kws={'label': 'Exact Match Rate'}, annot_kws={"size": 18})
-plt.title("Cross-Model Consistency Heatmap ")
-plt.xticks(rotation=20, ha='right')  # 倾斜横轴标签，右对齐
-
+plt.title("Cross-Model Consistency Heatmap")
+plt.xticks(rotation=20, ha='right')
 plt.tight_layout()
 plt.savefig(os.path.join(ROOT_DIR, "cross_consistency_heatmap_with_GT.png"), dpi=300)
 plt.close()
 
-
-# 图2：样本一致性分布（不含 GT vs 含 GT）
+# Figure 2: Sample-level consistency distribution (models only vs models+GT)
 plt.figure(figsize=(10, 8))
 sns.histplot(merged["sample_consistency"].dropna(), bins=20, kde=True, label="Models only", alpha=0.8)
 sns.histplot(merged["sample_consistency_with_GT"].dropna(), bins=20, kde=True, label="Models + GT", alpha=0.5)

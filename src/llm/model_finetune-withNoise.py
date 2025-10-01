@@ -38,7 +38,7 @@ What is the manner of collision?
 Only respond with a single number from the list above. Do not add any explanation."""
 
 
-# 碰撞类型标签字典（可用于后处理）
+
 collision_classes = {
     0: "Not Collision with Vehicle in Transport",
     1: "Rear-End",
@@ -51,12 +51,12 @@ collision_classes = {
 for i in range(600,601,600):
 
     print(f"Training with {i} samples")
-    # === 路径设置 ===
+    # === path ===
     model_id = "/mimer/NOBACKUP/groups/naiss2025-22-321/llama3-3b"
     file_path = "data/processed_data/case_info_2020.xlsx"
 
 
-    # === 加载模型和Tokenizer ===
+    # === model and Tokenizer ===
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, use_fast=False)
     tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(
@@ -66,12 +66,12 @@ for i in range(600,601,600):
         device_map="auto"
     )
     model.config.pad_token_id = tokenizer.pad_token_id
-    # === 加载数据并转换为Dataset ===
+    # === dataset ===
     df = pd.read_excel(file_path, sheet_name=0)[["SUMMARY", "MANCOLL"]].dropna().iloc[:i]
     df = df.rename(columns={"SUMMARY": "summary", "MANCOLL": "label"})
     dataset = Dataset.from_pandas(df)
 
-    # === 格式化数据 ===
+
     def format_example(example):
         prompt = build_prompt(example["summary"])
         label = str(example['label'])
@@ -82,7 +82,7 @@ for i in range(600,601,600):
         input_ids = prompt_ids["input_ids"]
         attention_mask = prompt_ids["attention_mask"]
 
-        # 构造 labels，前面是 -100，最后几个是答案 token
+        # Mask non-answer tokens with -100
         labels = [-100] * len(input_ids)
         answer_start = len(input_ids) - len(answer_ids)
         if answer_start < 0:
@@ -99,18 +99,18 @@ for i in range(600,601,600):
 
     tokenized_dataset = dataset.map(format_example, remove_columns=["summary", "label"])
 
-    # === LoRA 配置 ===
+    # === LoRA  ===
     peft_config = LoraConfig(
         r=8,
         lora_alpha=32,
-        target_modules=["q_proj", "v_proj", "k_proj"],  # 若报错可换成 ["c_attn"] 或查看模型结构
+        target_modules=["q_proj", "v_proj", "k_proj"],  
         lora_dropout=0.1,
         bias="none",
         task_type=TaskType.CAUSAL_LM
     )
     model = get_peft_model(model, peft_config)
 
-    # === Trainer 配置 ===
+    # === Trainer ===
     training_args = TrainingArguments(
         output_dir=f"models/llama3B-ft-MANCOLL-limit-sample/with-limit-samples-{i}",
         per_device_train_batch_size=2,
@@ -124,7 +124,7 @@ for i in range(600,601,600):
         dataloader_pin_memory=False,
     )
 
-    # === 创建 Trainer 并训练 ===
+    # Custom data collator to pad dynamically
 
     data_collator = lambda data: {
         "input_ids": pad_sequence([torch.tensor(f["input_ids"]) for f in data],
@@ -135,7 +135,7 @@ for i in range(600,601,600):
                                         padding_value=0),
         "labels": pad_sequence([torch.tensor(f["labels"]) for f in data],
                                 batch_first=True,
-                                padding_value=-100)  # -100 用于忽略 loss 计算
+                                padding_value=-100)  
     }
 
     trainer = Trainer(

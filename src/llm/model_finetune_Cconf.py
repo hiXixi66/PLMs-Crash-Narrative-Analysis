@@ -5,11 +5,12 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments,
 from peft import get_peft_model, LoraConfig, TaskType
 import json
 import re
+
+
 def build_crashconf_prompt(vehicle_index, vehicle_summary, crashconf_class_dict, text):
-    # if isinstance(crashconf_class_dict, str):
-    #     crashconf_class_dict = ast.literal_eval(crashconf_class_dict)
-    # crashconf_class_dict = json.loads(crashconf_class_dict)
-    # config_text = "\n".join([f"{k}: {v}" for k, v in crashconf_class_dict.items()])
+    """
+    Build the prompt for crash configuration classification.
+    """
     config_text = json.dumps(crashconf_class_dict)
 
     prompt = f"""You are a vehicle crash analysis expert.
@@ -25,9 +26,11 @@ def build_crashconf_prompt(vehicle_index, vehicle_summary, crashconf_class_dict,
     Crash Description:
     \"\"\"{vehicle_summary}\"\"\"
 
-    Please respond with the configuration label only (a single uppercase letter froom above classes).
+    Please respond with the configuration label only (a single uppercase letter from the above classes).
     """
     return prompt
+
+
 def replace_vehicle_reference(label_id: int, text: str) -> str:
     """
     Replace references like 'V5', 'V#5', 'Vehicle 5', or 'Vehicle #5'
@@ -35,6 +38,7 @@ def replace_vehicle_reference(label_id: int, text: str) -> str:
     """
     pattern = fr'\b(V#{label_id}|V{label_id}|Vehicle #{label_id}|Vehicle {label_id})\b'
     return re.sub(pattern, 'the vehicle to be classified', text, flags=re.IGNORECASE)
+
 
 def get_gt_CrashInfoperVeh(caseid, vehno, df_gv):
     """
@@ -46,10 +50,9 @@ def get_gt_CrashInfoperVeh(caseid, vehno, df_gv):
         df_gv (pd.DataFrame): DataFrame loaded from the 'GV' sheet.
 
     Returns:
-        tuple: (CRASHCAT, CRASHCONF) if found, else (None, None)
+        tuple: (CRASHCAT, CRASHCONF, CRASTYPE) if found, else (None, None, None)
     """
     row = df_gv[(df_gv['CASEID'] == caseid) & (df_gv['VEHNO'] == vehno)]
-    
     if not row.empty:
         crashcat = row.iloc[0]['CRASHCAT']
         crashconf = row.iloc[0]['CRASHCONF']
@@ -58,12 +61,14 @@ def get_gt_CrashInfoperVeh(caseid, vehno, df_gv):
     else:
         return None, None, None
 
-# === 路径设置 ===
+
+# === Path settings ===
 model_id = "/mimer/NOBACKUP/groups/naiss2025-22-321/qwen2.5-7b-instruct-1m"
 file_path = "data/processed_data/case_info_2021.xlsx"
 category_config_df = pd.read_excel("tests/crashtype.xlsx", sheet_name="Sheet1")
 config_crashtype_df = pd.read_excel("tests/crashtype.xlsx", sheet_name="Sheet3")
-# === 加载模型和Tokenizer ===
+
+# === Load model and tokenizer ===
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, use_fast=False)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
@@ -72,55 +77,50 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto"
 )
 
-# === 加载数据并转换为Dataset ===
-df = pd.read_excel(file_path, sheet_name=0)[["SUMMARY", "VEHICLES","CASEID"]].dropna()
+# === Load data and convert to HuggingFace Dataset ===
+df = pd.read_excel(file_path, sheet_name=0)[["SUMMARY", "VEHICLES", "CASEID"]].dropna()
 dataset = Dataset.from_pandas(df)
 df_gv = pd.read_excel(file_path, sheet_name='GV')
-# === 格式化数据 ===
+
+# === Format data for training ===
 def format_example(row, df_gv, category_config_df, tokenizer, max_length=512):
+    """
+    Convert a single crash case row into training examples for each vehicle.
+    """
     raw_summary = row['SUMMARY']
     case_id = row['CASEID']
     number_of_vehicles = int(row['VEHICLES'])
 
     examples = []
-    
     for i in range(1, number_of_vehicles + 1):
         summary = replace_vehicle_reference(i, raw_summary)
         GT_crashcat, GT_crashconf, GT_crashtype = get_gt_CrashInfoperVeh(caseid=case_id, vehno=i, df_gv=df_gv)
-        
+
         if pd.isna(GT_crashconf):
             print(f"[Warning] Missing ground truth crashconf for vehicle {i} in case {case_id}")
             continue
-        
-        crashcat = GT_crashcat
-        # if crashconf not in config_crashtype_df.columns:
-        #     print(f"[Warning] crashconf '{crashconf}' not found in config_crashtype_df columns.")
-        #     continue
-        
-        
-        label_str = GT_crashconf
-        # 获取分类信息
-        crashconf_class = category_config_df[category_config_df['crash category'] == GT_crashcat].iloc[0]
-        # print("Available keys:", crashconf_class.index.tolist())
 
-        # print(f"[Debug] Vehicle {i} in case {case_id}: GT_crashcat: {GT_crashcat}, GT_crashconf: {GT_crashconf}, GT_crashtype: {GT_crashtype}, crashconf_class: {crashconf_class}")
-        # 构造 prompt
+        # Get crash configuration description for this crash category
+        crashconf_class = category_config_df[category_config_df['crash category'] == GT_crashcat].iloc[0]
+
+        # Build prompt
         prompt = build_crashconf_prompt(
             vehicle_index=i,
             vehicle_summary=summary,
             crashconf_class_dict=crashconf_class['crash configuration long'],
             text=crashconf_class['text']
         )
-        # print(f"[Debug] Vehicle {i} in case {case_id}: {prompt}")
-        # print(f"[Debug] GT_crashconf: {GT_crashconf}, label_str: {label_str}")
 
-        # 编码 prompt 和 label
+        label_str = GT_crashconf
+
+        # Tokenize prompt and label
         prompt_tokenized = tokenizer(prompt, truncation=True, padding="max_length", max_length=max_length)
         answer_ids = tokenizer(label_str, add_special_tokens=False)["input_ids"]
 
         input_ids = prompt_tokenized["input_ids"]
         attention_mask = prompt_tokenized["attention_mask"]
 
+        # Mask non-answer tokens with -100
         labels = [-100] * len(input_ids)
         answer_start = len(input_ids) - len(answer_ids)
 
@@ -140,17 +140,20 @@ def format_example(row, df_gv, category_config_df, tokenizer, max_length=512):
 
     return examples
 
+
 def format_batch(batch):
+    """
+    Process a batch of rows into tokenized examples.
+    """
     results = []
     for i in range(len(batch["SUMMARY"])):
         row = {k: batch[k][i] for k in batch}
         examples = format_example(row, df_gv, category_config_df, tokenizer)
         results.extend(examples)
-    
-    # 转换为 dict of lists（HuggingFace datasets 要求）
+
     if not results:
         return {}
-    
+
     output = {k: [example[k] for example in results] for k in results[0]}
     return output
 
@@ -161,19 +164,18 @@ tokenized_dataset = dataset.map(
     remove_columns=dataset.column_names
 )
 
-
-# === LoRA 配置 ===
+# === LoRA configuration ===
 peft_config = LoraConfig(
     r=8,
     lora_alpha=32,
-    target_modules=["q_proj", "v_proj"], 
+    target_modules=["q_proj", "v_proj"],
     lora_dropout=0.1,
     bias="none",
     task_type=TaskType.CAUSAL_LM
 )
 model = get_peft_model(model, peft_config)
 
-# === Trainer 配置 ===
+# === Trainer configuration ===
 training_args = TrainingArguments(
     output_dir="models/qwen2.5-finetune-crashconflong",
     per_device_train_batch_size=2,
@@ -187,7 +189,7 @@ training_args = TrainingArguments(
     dataloader_pin_memory=False,
 )
 
-# === 创建 Trainer 并训练 ===
+# === Create Trainer and train ===
 data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, pad_to_multiple_of=8)
 
 trainer = Trainer(
@@ -200,8 +202,6 @@ trainer = Trainer(
         "attention_mask": torch.tensor([f["attention_mask"] for f in data]).to(model.device),
         "labels": torch.tensor([f["labels"] for f in data]).to(model.device),
     }
-    
 )
-
 
 trainer.train()

@@ -22,7 +22,7 @@ from transformers import (
     default_data_collator,
 )
 
-# ======== 配置 ========
+# ======== Configuration ========
 SEED = 42
 MODEL_NAME = "bert-base-uncased" 
 MAX_LENGTH = 256
@@ -35,7 +35,7 @@ LABEL_COL = "MANCOLLNEW"
 VAL_SIZE = 0.1              
 TEST_SIZE = 0.0               
 
-# ======== 随机种子 ========
+# ======== Random seed ========
 def set_seed(seed=SEED):
     random.seed(seed)
     np.random.seed(seed)
@@ -44,17 +44,17 @@ def set_seed(seed=SEED):
 
 set_seed()
 
-# ======== 读取数据 ========
+# ======== Load data ========
 df = pd.read_excel(EXCEL_PATH)
 # df_test_extra = pd.read_excel(test_path)
-# 清理空值
+# Clean empty rows
 df = df[[TEXT_COL, LABEL_COL]].dropna().reset_index(drop=True)
 # df_test_extra = df_test_extra[[TEXT_COL, LABEL_COL_TEST]].dropna().reset_index(drop=True)
-# ======== 标签编码 ========
-# 原始类别集合
+
+# ======== Label encoding ========
+# Original label set
 unique_labels = sorted(int(x) for x in df[LABEL_COL].unique())
 label2id = {orig: i for i, orig in enumerate(unique_labels)}
-
 id2label = {i: orig for orig, i in label2id.items()}
 num_labels = len(unique_labels)
 
@@ -78,7 +78,7 @@ df_train, df_val = train_test_split(
     df_trainval, test_size=VAL_SIZE, random_state=SEED, stratify=df_trainval[LABEL_COL]
 )
 
-# ======== Tokenizer 与 Dataset ========
+# ======== Tokenizer & Dataset ========
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
 
 class TextClsDataset(Dataset):
@@ -109,13 +109,14 @@ train_ds = TextClsDataset(df_train, TEXT_COL, LABEL_COL, tokenizer, MAX_LENGTH)
 val_ds   = TextClsDataset(df_val,   TEXT_COL, LABEL_COL, tokenizer, MAX_LENGTH)
 # test_ds  = TextClsDataset(df_test,  TEXT_COL, LABEL_COL, tokenizer, MAX_LENGTH) if df_test is not None else None
 # test_ds  = TextClsDataset(df_test_extra,  TEXT_COL, LABEL_COL_TEST, tokenizer, MAX_LENGTH) if df_test is not None else None
-# ======== 处理类别不平衡（类权重） ========
+
+# ======== Handle class imbalance (class weights) ========
 class_counts = df_train[LABEL_COL].value_counts().sort_index().values
-class_weights = (1.0 / (class_counts + 1e-9))  # 逆频率
+class_weights = (1.0 / (class_counts + 1e-9))  # Inverse frequency
 class_weights = class_weights / class_weights.sum() * num_labels
 class_weights_tensor = torch.tensor(class_weights, dtype=torch.float)
 
-# 自定义 Trainer 以注入 class weights
+# Custom Trainer to inject class weights
 class WeightedTrainer(Trainer):
     def __init__(self, *args, class_weights=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -140,10 +141,7 @@ class WeightedTrainer(Trainer):
         )
         return (loss, outputs) if return_outputs else loss
 
-
-
-
-# ======== 模型 ========
+# ======== Model ========
 model = AutoModelForSequenceClassification.from_pretrained(
     MODEL_NAME,
     num_labels=num_labels,
@@ -151,7 +149,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
     label2id=label2id,
 )
 
-# ======== 评估指标 ========
+# ======== Metrics ========
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     preds = np.argmax(logits, axis=1)
@@ -159,7 +157,7 @@ def compute_metrics(eval_pred):
     f1_macro = f1_score(labels, preds, average="macro")
     return {"accuracy": acc, "f1_macro": f1_macro}
 
-# ======== 训练参数 ========
+# ======== Training arguments ========
 training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
     per_device_train_batch_size=16,
@@ -167,7 +165,7 @@ training_args = TrainingArguments(
     learning_rate=2e-5,
     num_train_epochs=5,
     weight_decay=0.01,
-    eval_strategy="epoch",   # 老版本关键字
+    eval_strategy="epoch",   # (older Transformers keyword)
     save_strategy="epoch",
     load_best_model_at_end=True,
     metric_for_best_model="f1_macro",
@@ -187,7 +185,7 @@ trainer = WeightedTrainer(
     compute_metrics=compute_metrics,
 )
 
-# # ======== 训练 ========
+# ======== Training ========
 trainer.train()
 trainer.save_model(OUTPUT_DIR)
 tokenizer.save_pretrained(OUTPUT_DIR)
@@ -198,8 +196,8 @@ from transformers import AutoModelForSequenceClassification
 def eval_and_print(name, dataset):
     if dataset is None:
         return
-    # 从保存的 checkpoint 重新加载模型
-    checkpoint_dir ="models/bert-ft-MANCOLL-noise-test/with-noise-5perc2/checkpoint-940"
+    # Reload the model from a saved checkpoint
+    checkpoint_dir = "models/bert-ft-MANCOLL-noise-test/with-noise-5perc2/checkpoint-940"
     model = AutoModelForSequenceClassification.from_pretrained(
         checkpoint_dir,
         num_labels=num_labels,
@@ -207,7 +205,7 @@ def eval_and_print(name, dataset):
         label2id=label2id,
     )
 
-    # 用新的 Trainer 做预测
+    # Use a new Trainer for prediction
     tmp_trainer = Trainer(
         model=model,
         processing_class=tokenizer, 
@@ -237,6 +235,8 @@ def eval_and_print(name, dataset):
         y_pred,
         target_names=[id2label2[i] for i in range(num_labels)]
     ))
+
+    # Save predictions for inspection
     for i in range(3500):
         records.append({
             'SUMMARY': "*",
@@ -250,7 +250,8 @@ def eval_and_print(name, dataset):
         os.makedirs(dir_path)
 
     result_df.to_excel(output_path, index=False)
-    # 去掉 Unknown
+
+    # Exclude "Unknown" class and evaluate again
     mask = y_true != 6
     y_true_filtered = y_true[mask]
     y_pred_filtered = y_pred[mask]
@@ -264,7 +265,7 @@ def eval_and_print(name, dataset):
 # eval_and_print("Validation", val_ds)
 # eval_and_print("Test", test_ds)
 
-# ======== 推理函数示例 ========
+# ======== Inference example ========
 def predict_texts(texts: List[str]) -> List[int]:
     enc = tokenizer(
         texts,
@@ -279,11 +280,10 @@ def predict_texts(texts: List[str]) -> List[int]:
         preds = torch.argmax(logits, dim=-1).cpu().numpy().tolist()
     return [id2label[p] for p in preds]
 
-# 示例：
+# Example:
 if __name__ == "__main__":
     examples = [
         "V1 struck the rear of V2 pushing V2 into V3. V3 then left the scene.",
         "Two vehicles collided head-on on a two-lane road.",
     ]
     print("\nPredictions:", predict_texts(examples))
-

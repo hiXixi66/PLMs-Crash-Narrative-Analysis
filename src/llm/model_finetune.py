@@ -38,7 +38,6 @@ What is the manner of collision?
 Only respond with a single number from the list above. Do not add any explanation."""
 
 
-# 碰撞类型标签字典（可用于后处理）
 collision_classes = {
     0: "Not Collision with Vehicle in Transport",
     1: "Rear-End",
@@ -49,11 +48,10 @@ collision_classes = {
     9: "Unknown"
 }
 
-# === 路径设置 ===
-model_id = "/mimer/NOBACKUP/groups/naiss2025-22-321/Mistral"
+model_id = "Mistral"
 file_path = "data/processed_data/case_info_2021.xlsx"
 
-# === 加载模型和Tokenizer ===
+# === load model and Tokenizer ===
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, use_fast=False)
 tokenizer.pad_token = tokenizer.eos_token
 model = AutoModelForCausalLM.from_pretrained(
@@ -63,12 +61,12 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto"
 )
 model.config.pad_token_id = tokenizer.pad_token_id
-# === 加载数据并转换为Dataset ===
+# === Dataset ===
 df = pd.read_excel(file_path, sheet_name=0)[["SUMMARY", "MANCOLL"]].dropna()
 df = df.rename(columns={"SUMMARY": "summary", "MANCOLL": "label"})
 dataset = Dataset.from_pandas(df)
 
-# === 格式化数据 ===
+
 def format_example(example):
     prompt = build_prompt(example["summary"])
     label = str(example['label'])
@@ -79,7 +77,7 @@ def format_example(example):
     input_ids = prompt_ids["input_ids"]
     attention_mask = prompt_ids["attention_mask"]
 
-    # 构造 labels，前面是 -100，最后几个是答案 token
+    # Mask non-answer tokens with -100
     labels = [-100] * len(input_ids)
     answer_start = len(input_ids) - len(answer_ids)
     if answer_start < 0:
@@ -96,18 +94,18 @@ def format_example(example):
 
 tokenized_dataset = dataset.map(format_example, remove_columns=["summary", "label"])
 
-# === LoRA 配置 ===
+# === LoRA ===
 peft_config = LoraConfig(
     r=8,
     lora_alpha=32,
-    target_modules=["q_proj", "v_proj", "k_proj"],  # 若报错可换成 ["c_attn"] 或查看模型结构
+    target_modules=["q_proj", "v_proj", "k_proj"],  # Adjusted for Mistral model architecture
     lora_dropout=0.1,
     bias="none",
     task_type=TaskType.CAUSAL_LM
 )
 model = get_peft_model(model, peft_config)
 
-# === Trainer 配置 ===
+# === Trainer  ===
 training_args = TrainingArguments(
     output_dir="models/mistral-ft-MANCOLL",
     per_device_train_batch_size=2,
@@ -121,7 +119,7 @@ training_args = TrainingArguments(
     dataloader_pin_memory=False,
 )
 
-# === 创建 Trainer 并训练 ===
+
 
 data_collator = lambda data: {
     "input_ids": pad_sequence([torch.tensor(f["input_ids"]) for f in data],
@@ -132,7 +130,7 @@ data_collator = lambda data: {
                                     padding_value=0),
     "labels": pad_sequence([torch.tensor(f["labels"]) for f in data],
                             batch_first=True,
-                            padding_value=-100)  # -100 用于忽略 loss 计算
+                            padding_value=-100) 
 }
 
 trainer = Trainer(
