@@ -1,4 +1,4 @@
-# PLMS-CRASH-NARRATIVE-ANALYSIS
+# Domain-Adapted Pre-trained Language Models for Safe and Reliable Crash Narrative Analysis
 
 This project provides **tools to analyze free-text crash narratives** from real-world crash databases.
 It uses **open-source language models** (BERT and LoRA-fine-tuned LLMs) to extract key crash information, such as:
