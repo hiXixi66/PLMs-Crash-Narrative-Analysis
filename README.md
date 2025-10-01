@@ -68,14 +68,16 @@ PLMS-CRASH-NARRATIVE-ANALYSIS/
 └── MANCOLL_test.py
 
 ````
-Before running inference, you should fine-tune the model and save it. Then load the saved model for inference:
+
 ---
 
-## ⚙️ Model Storage Configuration
+## ⚙️ Model Loader Configuration
 
 Edit `src/llm/llm_loader_HPC.py` to set the storage paths of your LLMs (on HPC or local server):
 
 All training scripts import this file to load models automatically.
+
+Before running inference, you should fine-tune the model and save it. Then load the saved model for inference.
 
 ---
 
