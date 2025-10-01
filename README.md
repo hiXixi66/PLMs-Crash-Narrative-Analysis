@@ -1,16 +1,30 @@
-
 # PLMS-CRASH-NARRATIVE-ANALYSIS
 
-This project contains data processing, model fine-tuning, and evaluation scripts for **traffic crash narrative analysis**.  
-It supports **large language models (PLMs)** (e.g., Qwen, LLaMA, BERT) and classic NLP models (TextRNN, FastText) for tasks such as:
-- **MANCOLL classification** (manner of collision)
-- **Crash Category (CCat)**
-- **Crash Configuration (CConf)**
-- **Crash Type (CTp)**
+This project provides **tools to analyze free-text crash narratives** from real-world crash databases.
+It uses **open-source language models** (BERT and LoRA-fine-tuned LLMs) to extract key crash information, such as:
 
-The project is expected to run on **GPU-enabled servers**.
+* **Manner of Collision (MANCOLL)**
+* **Crash Category (CCat)**
+* **Crash Configuration (CConf)**
+* **Crash Type (CTp, vehicle-level)**
+
+### Why
+
+* Crash narratives are **unstructured** and hard to process in large scale.
+* **Closed-source LLMs** can be expensive, have **privacy risks**, and lack **domain knowledge**.
+* We show that **compact, fine-tuned open models** can work better with **low GPU cost**.
+
+### Features
+
+* Data preprocessing and noise data generation tools
+* Fine-tuning scripts for BERT and LoRA-based LLMs
+* Evaluation: accuracy, self-consistency, cross-model agreement and robustness testing
+* Visualization of prediction distributions
+
+The code is designed to run on **local GPUs** without sending sensitive data to external APIs.
 
 ---
+
 
 ## 📂 Project Structure
 
