@@ -1,0 +1,21 @@
+NASS-CDS (1979-2015) / CISS (2016-): in-depth data, used for crashworthiness analysis
+
+NASS-CDS Ð National Automotive Sampling System - Crashworthiness Data System
+A probability sample of tow-away crashes involving light vehicles
+Data from 1979 to 2015 are available at: https://www.nhtsa.gov/content/nhtsa-ftp/179871
+
+NASS-CDS is now replaced by CISS, see below
+Includes in-depth information about approximately 3000-4500 crashes annually:
+Crush-based estimation of Delta-V using WinSMASH
+AIS coding of injuries
+
+CISS: Crash Investigation Sampling System
+Data from 2017 to 2023 are available at: https://www.nhtsa.gov/content/nhtsa-ftp/206
+
+Case viewer for NASS-CDS and CISS allows filtering of crashes to find cases of interest
+
+Manuals, fact sheets, statistics, etc. are available at:
+https://crashstats.nhtsa.dot.gov
+
+Detailed information & links on the NHTSA webpage:
+https://www.nhtsa.gov/research-data/national-automotive-sampling-system-nass

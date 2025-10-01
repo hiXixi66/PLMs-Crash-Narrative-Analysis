@@ -1,0 +1,43 @@
+Priority 1:
+
+-What was the direction of travel of Vehicles in CASE 27737?
+-Was the vehicle equipped with any active safety systems in CASE 27020? 
+-Was lane departure warning system equipped on the vehicles in CASE 25560？
+-Was lane departure warning active in CASE 27808？
+-Did the forward collision warning system activate before the crash in CASE 28321? 
+-Was the first vehicle equipped with the forward collision warning system in CASE 6050?
+-Was the second vehicle equipped with the forward collision warning system in CASE 6050?
+-What speed were the vehicles traveling in CASE XXXX?
+-What was the manner of the collision in CASE 27808? (for example, for this question, we have the ground truth in the column 'MANCOLL' so we can use it to test the pipeline)
+-What was the manner of the collision in CASE 27787?
+-What was the crash configuration in CASE 28321？
+-What was the crash type in CASE 25576？ (for example, for this question, we have the ground truth in the column 'CRASHTYPE' so we can use it to test the pipeline)
+
+
+Priority 2:
+
+-What was the general area of damage on the first vehicle in CASE 27020? 
+-What was the general area of damage on the other vehicle in CASE 25560? 
+
+-What was the general area of damage on the first vehicle in CASE 27737? 
+-What was the general area of damage on the other vehicle in CASE 25560? 
+ 
+-What were models of vehicles in CASE 25576？ 
+
+
+Not prioritized at all:
+
+-What percentage of accidents occurred in January?
+-What proportion of accidents occurred on a Wednesday?
+-Which day of the week has the highest number of accidents?
+-What percentage of crashes involved a single vehicle vs. multiple vehicles?
+-What proportion of crashes were rear-end collisions vs. head-on collisions?
+-What percentage of drivers were wearing seat belts at the time of the crash? 
+-What proportion of accidents involved Motored Cycles compared to Utility Vehicles?
+-What proportion of crashes had a high speed limit (above 90 Km/h)? 
+
+-At what time did the crash occur of CASE 27787?
+-At what time did the crash occur of CASE 27020?
+
+
+-How old are people in CASE 27737? (this question can be directly accessed from the column 'Age', and it is usualy  available, if we want to use it to test something then we need to rephrase it: What is the age of the people in CASE xxxx', otherwise it is not priority and is not very interesting question)
